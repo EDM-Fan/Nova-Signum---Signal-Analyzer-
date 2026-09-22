@@ -1,0 +1,74 @@
+# ──────────────────────────────────────────────
+#  Python
+# ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+MANIFEST
+
+# ──────────────────────────────────────────────
+#  Virtual environments
+# ──────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env/
+
+# ──────────────────────────────────────────────
+#  Scratch / temporary work
+# ──────────────────────────────────────────────
+scratch/
+
+# ──────────────────────────────────────────────
+#  Generated / large signal files
+#  (keep the curated samples/ sub-set only)
+# ──────────────────────────────────────────────
+*.iq
+*.wav
+*.npy
+
+# Allow the curated starter samples explicitly
+!samples/bpsk_1000ksps_f32.iq
+!samples/qpsk_1000ksps_f32.iq
+!samples/2fsk_1000ksps_f32.iq
+
+# Large waterfall PNGs in samples/
+samples/*_waterfall.png
+
+# ──────────────────────────────────────────────
+#  Test / debug screenshots at root level
+# ──────────────────────────────────────────────
+gui_constellation_verified.png
+pass4_*.png
+test_constel_*.png
+snr_sweep_ber_curve.png
+
+# ──────────────────────────────────────────────
+#  IDE / Editor folders
+# ──────────────────────────────────────────────
+.idea/
+.vscode/
+*.code-workspace
+
+# ──────────────────────────────────────────────
+#  OS noise
+# ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ──────────────────────────────────────────────
+#  Coverage / testing artefacts
+# ──────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/

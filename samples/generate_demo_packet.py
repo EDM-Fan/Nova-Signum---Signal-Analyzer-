@@ -1,0 +1,96 @@
+"""
+samples/generate_demo_packet.py
+===============================
+Generates a complete test packet exercising the entire DSP & FEC pipeline:
+1. 512 random information bits
+2. Convolutional Encoding (K=7, Rate 1/2) -> 1036 coded bits (512 + 6 tail)
+3. Pad with dummy bits to 1280 (5 full 256-bit blocks) to maintain constant envelope
+4. Block Interleaving (8 x 32) -> 1280 interleaved bits
+5. Prepend unencoded 32-bit sync word (0xEB902A3C) -> 1312 packet bits
+6. Modulate as BPSK baseband IQ (RRC pulse shaping, sps=8, Fs=1MHz, SNR=18dB, CFO=0Hz)
+7. Saves float32 .iq file to samples/bpsk_full_pipeline_demo.iq
+8. Saves ground-truth 512 info bits to samples/bpsk_full_pipeline_demo_bits.npy
+"""
+
+import os
+import sys
+import numpy as np
+
+# Project root on path
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from modulation.fec import conv_encode
+from modulation.deinterleaver import block_interleave
+from modulation.correlator import DEFAULT_SYNC_32
+from modulation.signal_gen import _rrc_filter, _apply_offsets, _add_awgn
+
+OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def generate_demo_packet(
+    num_info_bits: int = 512,
+    sample_rate: int = 1_000_000,
+    sps: int = 8,
+    snr_db: float = 18.0,
+    freq_offset_hz: float = 0.0,
+    phase_offset_rad: float = 0.0,
+    seed: int = 42,
+):
+    np.random.seed(seed)
+
+    # 1. 512 Information bits
+    info_bits = np.random.randint(0, 2, num_info_bits)
+
+    # 2. Convolutional encoding (512 + 6 tail -> 1036 coded bits)
+    coded_bits = conv_encode(info_bits)
+
+    # 3. Pad to multiple of 256 (5 blocks = 1280 bits) with random dummy bits
+    block_size = 8 * 32
+    n_pad = (block_size - (len(coded_bits) % block_size)) % block_size
+    dummy_pad = np.random.randint(0, 2, n_pad)
+    padded_coded = np.concatenate([coded_bits, dummy_pad])
+
+    # 4. Block interleaving (1280 bits across 5 blocks of 256)
+    interleaved_bits = block_interleave(padded_coded, rows=8, cols=32)
+
+    # 5. Prepend unencoded 32-bit sync word
+    sync_word = DEFAULT_SYNC_32
+    packet_bits = np.concatenate([sync_word, interleaved_bits])
+
+    # 6. Modulate BPSK
+    symbols = 2 * packet_bits - 1  # ±1
+    upsampled = np.zeros(len(symbols) * sps, dtype=complex)
+    upsampled[::sps] = symbols
+
+    h = _rrc_filter(beta=0.35, span=8, sps=sps)
+    sig = np.convolve(upsampled, h, mode="same")
+    sig = _apply_offsets(sig, sample_rate, freq_offset_hz, phase_offset_rad)
+    sig = _add_awgn(sig, snr_db)
+
+    # 7. Save interleaved float32 .iq file
+    iq_path = os.path.join(OUTPUT_DIR, "bpsk_full_pipeline_demo.iq")
+    raw_iq = np.empty(2 * len(sig), dtype=np.float32)
+    raw_iq[0::2] = sig.real.astype(np.float32)
+    raw_iq[1::2] = sig.imag.astype(np.float32)
+    raw_iq.tofile(iq_path)
+
+    # 8. Save ground truth information bits
+    npy_path = os.path.join(OUTPUT_DIR, "bpsk_full_pipeline_demo_bits.npy")
+    np.save(npy_path, info_bits)
+
+    print(f"Generated demo packet:")
+    print(f"  Info Bits        : {num_info_bits}")
+    print(f"  Coded Bits       : {len(coded_bits)}")
+    print(f"  Interleaved Bits : {len(interleaved_bits)}")
+    print(f"  Total Packet Bits: {len(packet_bits)} ({len(sync_word)} sync + {len(interleaved_bits)} payload)")
+    print(f"  Complex IQ Samples: {len(sig):,} ({os.path.getsize(iq_path):,} bytes)")
+    print(f"  Saved IQ File    : {iq_path}")
+    print(f"  Saved Ground Truth: {npy_path}")
+
+    return iq_path, npy_path
+
+
+if __name__ == "__main__":
+    generate_demo_packet()
